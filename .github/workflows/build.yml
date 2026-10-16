@@ -35,22 +35,27 @@ jobs:
         run: |
           $iso = "$env:RUNNER_TEMP\wdk.iso"
           $dir = "$env:RUNNER_TEMP\wdk"
-          $wdk = 'C:\WinDDK\7600.16385.1'
+          $out = "$env:RUNNER_TEMP\wdkfiles"
           Invoke-WebRequest -Uri 'https://download.microsoft.com/download/4/A/2/4A25C7D5-EFBE-4182-B6A9-AE6850409A78/GRMWDK_EN_7600_1.ISO' -OutFile $iso
           7z x $iso "-o$dir" -y | Out-Null
-          Get-ChildItem $dir -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
 
-          # KitSetup.exe is interactive and hangs on CI, so install the MSI packages directly
-          $msis = Get-ChildItem $dir -Recurse -Filter *.msi
+          # KitSetup.exe is interactive and the MSIs do nothing when installed standalone,
+          # so extract their files with an administrative install instead
+          $msis = Get-ChildItem $dir -Recurse -Filter *.msi | Where-Object { $_.Name -notmatch 'ia64' }
           foreach ($msi in $msis) {
-            Write-Host "Installing $($msi.FullName)"
-            $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$($msi.FullName)`"", '/qn', '/norestart', "INSTALLDIR=`"$wdk`"", 'ALLUSERS=1'
-            Write-Host "Exit code: $($p.ExitCode)"
+            $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$out`""
+            if ($p.ExitCode -ne 0) { Write-Host "$($msi.Name): exit code $($p.ExitCode)" }
           }
-          if (-not (Test-Path "$wdk\inc\ddk")) {
-            Get-ChildItem C:\WinDDK -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-            throw "WDK 7.1.0 install failed: $wdk\inc\ddk not found"
+
+          $ntddk = Get-ChildItem $out -Recurse -Filter ntddk.h -ErrorAction SilentlyContinue |
+            Where-Object { $_.DirectoryName -match '\\inc\\ddk$' } | Select-Object -First 1
+          if (-not $ntddk) {
+            Get-ChildItem $out -Recurse -Depth 3 -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            throw "WDK extraction failed: ntddk.h not found under $out"
           }
+          $wdk = $ntddk.Directory.Parent.Parent.FullName
+          Write-Host "WDK root: $wdk"
+          Get-ChildItem "$wdk\lib" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
           "WDK7_PATH=$wdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - uses: microsoft/setup-msbuild@v2
