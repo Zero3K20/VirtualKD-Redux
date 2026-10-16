@@ -656,6 +656,16 @@ void CMainDlg::CreateStatusMapping(PatchedProcess &proc, bool Reset)
 
 bool CMainDlg::InitiatePatching(PatchedProcess &proc)
 {
+    if (proc.hMapping != INVALID_HANDLE_VALUE)
+    {
+        if (proc.pStatus)
+        {
+            UnmapViewOfFile(proc.pStatus);
+            proc.pStatus = NULL;
+        }
+        CloseHandle(proc.hMapping);
+        proc.hMapping = INVALID_HANDLE_VALUE;
+    }
     CreateStatusMapping(proc, true);
     if (proc.hLogPipe == INVALID_HANDLE_VALUE)
         proc.hLogPipe = CreateLogPipe(proc.PID);
@@ -716,7 +726,7 @@ void CMainDlg::PerformProcessActions(PatchedProcess &proc, TimeSpan &runTime, bo
             if (runTime.GetTotalSeconds() > m_Params.PatchDelay)
             {
                 // VirtualBox 7.x seems to start slower than earlier versions. Add some additional time for this (if needed)
-                if (proc.vmType == kVBox64)
+                if ((proc.vmType == kVBox64) || (proc.vmType == kVBox32))
                 {
                     if (!IsVMSessionPatched(proc.PID) && runTime.GetTotalSeconds() < m_Params.PatchDelay * 4)
                     {
@@ -730,6 +740,24 @@ void CMainDlg::PerformProcessActions(PatchedProcess &proc, TimeSpan &runTime, bo
             }
         }
     } while (0);
+
+    //VirtualBox can load KDCLIENT late. If it appears after all hooking attempts failed, recover instead of staying red.
+    if ((proc.State == PatchFailed) && proc.PatchAttempts && proc.StillRunning && IsVMSessionPatched(proc.PID))
+    {
+        if (proc.hMapping != INVALID_HANDLE_VALUE)
+        {
+            if (proc.pStatus)
+            {
+                UnmapViewOfFile(proc.pStatus);
+                proc.pStatus = NULL;
+            }
+            CloseHandle(proc.hMapping);
+            proc.hMapping = INVALID_HANDLE_VALUE;
+        }
+        CreateStatusMapping(proc, false);
+        proc.PatchAttempts = 0;
+        proc.State = PatchSuccessful;
+    }
 
     if (proc.State == PatchInProgress)
     {
