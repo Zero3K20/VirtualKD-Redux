@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: VirtualKD-Redux
@@ -30,13 +31,27 @@ jobs:
       - name: Install Windows Driver Kit 7.1.0
         shell: pwsh
         working-directory: .
+        timeout-minutes: 30
         run: |
           $iso = "$env:RUNNER_TEMP\wdk.iso"
+          $dir = "$env:RUNNER_TEMP\wdk"
+          $wdk = 'C:\WinDDK\7600.16385.1'
           Invoke-WebRequest -Uri 'https://download.microsoft.com/download/4/A/2/4A25C7D5-EFBE-4182-B6A9-AE6850409A78/GRMWDK_EN_7600_1.ISO' -OutFile $iso
-          7z x $iso "-o$env:RUNNER_TEMP\wdk" -y | Out-Null
-          $p = Start-Process -FilePath "$env:RUNNER_TEMP\wdk\KitSetup.exe" -Wait -PassThru -ArgumentList '/ui-level','quiet','/install','Build Environments','/norestart'
-          if (-not (Test-Path 'C:\WinDDK\7600.16385.1\inc\ddk')) { throw "WDK 7.1.0 install failed (exit $($p.ExitCode))" }
-          "WDK7_PATH=C:\WinDDK\7600.16385.1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          7z x $iso "-o$dir" -y | Out-Null
+          Get-ChildItem $dir -Recurse -Depth 2 | Select-Object -ExpandProperty FullName
+
+          # KitSetup.exe is interactive and hangs on CI, so install the MSI packages directly
+          $msis = Get-ChildItem $dir -Recurse -Filter *.msi
+          foreach ($msi in $msis) {
+            Write-Host "Installing $($msi.FullName)"
+            $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$($msi.FullName)`"", '/qn', '/norestart', "INSTALLDIR=`"$wdk`"", 'ALLUSERS=1'
+            Write-Host "Exit code: $($p.ExitCode)"
+          }
+          if (-not (Test-Path "$wdk\inc\ddk")) {
+            Get-ChildItem C:\WinDDK -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            throw "WDK 7.1.0 install failed: $wdk\inc\ddk not found"
+          }
+          "WDK7_PATH=$wdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - uses: microsoft/setup-msbuild@v2
 
