@@ -1,0 +1,67 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: VirtualKD-Redux
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install VS 2022 Windows XP toolset (v141_xp) and ATL
+        shell: pwsh
+        working-directory: .
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $p = Start-Process -FilePath $setup -Wait -PassThru -ArgumentList @(
+            'modify', '--installPath', "`"$vs`"", '--quiet', '--norestart', '--noUpdateInstaller',
+            '--add', 'Microsoft.VisualStudio.Component.WinXP',
+            '--add', 'Microsoft.VisualStudio.Component.VC.ATL',
+            '--add', 'Microsoft.VisualStudio.Component.VC.ATL.ARM64')
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "VS installer failed: $($p.ExitCode)" }
+
+      - name: Install Windows Driver Kit 7.1.0
+        shell: pwsh
+        working-directory: .
+        run: |
+          $iso = "$env:RUNNER_TEMP\wdk.iso"
+          Invoke-WebRequest -Uri 'https://download.microsoft.com/download/4/A/2/4A25C7D5-EFBE-4182-B6A9-AE6850409A78/GRMWDK_EN_7600_1.ISO' -OutFile $iso
+          7z x $iso "-o$env:RUNNER_TEMP\wdk" -y | Out-Null
+          $p = Start-Process -FilePath "$env:RUNNER_TEMP\wdk\KitSetup.exe" -Wait -PassThru -ArgumentList '/ui-level','quiet','/install','Build Environments','/norestart'
+          if (-not (Test-Path 'C:\WinDDK\7600.16385.1\inc\ddk')) { throw "WDK 7.1.0 install failed (exit $($p.ExitCode))" }
+          "WDK7_PATH=C:\WinDDK\7600.16385.1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Build
+        run: |
+          foreach ($cfg in 'Debug','Release') {
+            foreach ($plat in 'Win32','x64') {
+              msbuild /m VirtualKD-Redux.sln /property:Platform=$plat /property:Configuration=$cfg
+              if ($LASTEXITCODE -ne 0) { throw "Build failed: $cfg|$plat" }
+            }
+          }
+
+      - name: Create bundles
+        shell: cmd
+        run: call createbundles.bat
+
+      - name: Create ZIP archives
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path Zips | Out-Null
+          Copy-Item ..\LICENSE, ..\README.md, Docs\Tutorial.md Bundles\ReleaseBundle\
+          Compress-Archive -Path Bundles\ReleaseBundle\* -DestinationPath Zips\VirtualKD-Redux-Release.zip
+          Compress-Archive -Path Bundles\DebugBundle\* -DestinationPath Zips\VirtualKD-Redux-Debug.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VirtualKD-Redux
+          path: VirtualKD-Redux/Zips/*.zip
