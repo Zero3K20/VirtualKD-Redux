@@ -76,6 +76,7 @@ public:
 
     bool SessionNameRetreived;
     VMType vmType;
+    unsigned PatchAttempts;
 
     PatchedProcess()
         : PID(0)
@@ -102,6 +103,7 @@ public:
         , PrevPolls(0)
         , PollRate(0)
         , vmType(kVMUnknown)
+        , PatchAttempts(0)
     {
     }
 };

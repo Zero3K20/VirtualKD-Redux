@@ -667,7 +667,8 @@ bool CMainDlg::InitiatePatching(PatchedProcess &proc)
     }
     else if (proc.hRemoteThread == INVALID_HANDLE_VALUE)
     {
-        proc.State = PatchFailed;
+        //Transient failures (e.g. VM still starting up) are retried a few times
+        proc.State = (++proc.PatchAttempts < 5) ? PatchPending : PatchFailed;
         return false;
     }
     else
@@ -739,7 +740,7 @@ void CMainDlg::PerformProcessActions(PatchedProcess &proc, TimeSpan &runTime, bo
             if (dwCode)
                 proc.State = PatchInProgress2;
             else
-                proc.State = PatchFailed;
+                proc.State = (++proc.PatchAttempts < 5) ? PatchPending : PatchFailed;
             CloseHandle(proc.hRemoteThread);
             proc.hRemoteThread = INVALID_HANDLE_VALUE;
         }

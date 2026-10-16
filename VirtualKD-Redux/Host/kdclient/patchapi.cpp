@@ -319,9 +319,9 @@ static bool DoSynchronousThreadOperation(HANDLE hThread)
     else
     {
         WaitForSingleObject(hThread, INFINITE);
-        CloseHandle(hThread);
         DWORD dwCode = 0;
         GetExitCodeThread(hThread, &dwCode);
+        CloseHandle(hThread);
         return (dwCode != 0);
     }
 }
