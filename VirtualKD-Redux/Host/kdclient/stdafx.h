@@ -11,6 +11,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 // Windows Header Files:
 #include <windows.h>
+#ifndef E_BOUNDS
+#define E_BOUNDS _HRESULT_TYPEDEF_(0x8000000BL)	//Missing from the Windows 7.1A SDK, but required by modern ATL
+#endif
 #include <tchar.h>
 
 
