@@ -69,7 +69,7 @@ jobs:
         run: |
           $exp = (Get-Date).AddYears(10)
           $ca = New-SelfSignedCertificate -Subject 'CN=VirtualKD-Redux CA' -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -KeyUsage CertSign,CRLSign -TextExtension @('2.5.29.19={critical}{text}ca=true') -CertStoreLocation Cert:\CurrentUser\My -NotAfter $exp
-          $spc = New-SelfSignedCertificate -Subject 'CN=VirtualKD-Redux SPC' -Type CodeSigningCert -Signer $ca -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -CertStoreLocation Cert:\CurrentUser\My -NotAfter $exp
+          $spc = New-SelfSignedCertificate -Subject 'CN=VirtualKD-Redux SPC' -Type CodeSigningCert -Signer $ca -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -CertStoreLocation Cert:\CurrentUser\My -NotAfter $exp -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3&1.3.6.1.4.1.311.61.1.1')
           Export-Certificate -Cert $ca -FilePath Certs\VKD-Redux_CA.cer | Out-Null
           [IO.File]::WriteAllBytes("$PWD\Certs\VKD-Redux_SPC.pfx", $spc.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx))
 
