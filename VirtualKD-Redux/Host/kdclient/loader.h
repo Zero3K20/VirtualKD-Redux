@@ -64,7 +64,7 @@ public:
         if (!p)
             return INVALID_HANDLE_VALUE;
         HANDLE hProc = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE, FALSE, PID);
-        if (hProc == INVALID_HANDLE_VALUE)
+        if (!hProc || hProc == INVALID_HANDLE_VALUE)
             return INVALID_HANDLE_VALUE;
         LPVOID lp = VirtualAllocEx(hProc, 0, 4096, MEM_COMMIT, PAGE_READWRITE);
         if (!lp)
@@ -76,11 +76,18 @@ public:
         BOOL b = WriteProcessMemory(hProc, lp, m_DllName, wcslen(m_DllName) * 2 + 2, &dwOk);
         if (!b)
         {
+            VirtualFreeEx(hProc, lp, 0, MEM_RELEASE);
             CloseHandle(hProc);
             return INVALID_HANDLE_VALUE;
         }
         DWORD ID = 0;
         HANDLE hThread = CreateRemoteThread(hProc, 0, 0, (LPTHREAD_START_ROUTINE)p, lp, 0, &ID);
+        if (!hThread)
+        {
+            VirtualFreeEx(hProc, lp, 0, MEM_RELEASE);
+            CloseHandle(hProc);
+            return INVALID_HANDLE_VALUE;
+        }
         CloseHandle(hProc);
         if (pThreadID)
             *pThreadID = ID;
@@ -96,12 +103,14 @@ public:
         if (!p)
             return INVALID_HANDLE_VALUE;
         HANDLE hProc = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE, FALSE, PID);
-        if (hProc == INVALID_HANDLE_VALUE)
+        if (!hProc || hProc == INVALID_HANDLE_VALUE)
             return INVALID_HANDLE_VALUE;
         DWORD ID = 0;
         HINSTANCE hInst = FindLibraryInProcess(PID, UseShortName);
         HANDLE hThread = CreateRemoteThread(hProc, 0, 0, (LPTHREAD_START_ROUTINE)p, (LPVOID)hInst, 0, &ID);
         CloseHandle(hProc);
+        if (!hThread)
+            return INVALID_HANDLE_VALUE;
         if (pThreadID)
             *pThreadID = ID;
         return hThread;
