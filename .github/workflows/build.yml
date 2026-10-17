@@ -58,6 +58,21 @@ jobs:
           Get-ChildItem "$wdk\lib" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
           "WDK7_PATH=$wdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Install VirtualBox (provides the COM type library for VirtualBoxIntegration)
+        shell: pwsh
+        run: |
+          choco install virtualbox -y --no-progress
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3010) { throw "VirtualBox install failed: $LASTEXITCODE" }
+
+      - name: Generate code signing certificates
+        shell: pwsh
+        run: |
+          $exp = (Get-Date).AddYears(10)
+          $ca = New-SelfSignedCertificate -Subject 'CN=VirtualKD-Redux CA' -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -KeyUsage CertSign,CRLSign -TextExtension @('2.5.29.19={critical}{text}ca=true') -CertStoreLocation Cert:\CurrentUser\My -NotAfter $exp
+          $spc = New-SelfSignedCertificate -Subject 'CN=VirtualKD-Redux SPC' -Type CodeSigningCert -Signer $ca -KeyAlgorithm RSA -KeyLength 4096 -HashAlgorithm SHA256 -KeyExportPolicy Exportable -CertStoreLocation Cert:\CurrentUser\My -NotAfter $exp
+          Export-Certificate -Cert $ca -FilePath Certs\VKD-Redux_CA.cer | Out-Null
+          [IO.File]::WriteAllBytes("$PWD\Certs\VKD-Redux_SPC.pfx", $spc.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx))
+
       - uses: microsoft/setup-msbuild@v2
 
       - name: Build

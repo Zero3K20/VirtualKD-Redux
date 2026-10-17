@@ -11,6 +11,7 @@
 #define _WIN32_IE	0x0700
 #define _RICHEDIT_VER	0x0300
 
+#include <winsock2.h>	//Must precede windows.h, otherwise the winsock.h it pulls in conflicts with the one included by modern ATL
 #include <windows.h>
 #ifndef E_BOUNDS
 #define E_BOUNDS _HRESULT_TYPEDEF_(0x8000000BL)	//Missing from the Windows 7.1A SDK, but required by modern ATL
